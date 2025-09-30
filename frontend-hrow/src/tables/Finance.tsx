@@ -1,59 +1,131 @@
-import { useState, type Dispatch, type SetStateAction } from "react";
-import DataTable from "../components/datatable";
+import { useState } from "react";
+import ButtonHolder from "../components/ButtonHolder";
+import FinanceTable, { type FinanceEntry } from "../components/Datatable";
+import type { Worker } from "./Workers";
+import { getFinance } from "../helpers/getData"; // <- your faker helper
 
-// interface propsBudget {
-//   onRowSelect: Dispatch<SetStateAction<null>>;
-//   selectedRow: null;
-// }
+interface FinanceWrapperProps {
+  workers: Worker[];
+}
 
-export default function BudgetTable({ onRowSelect, selectedRow }) {
-  const [data, setData] = useState([
-    {
-      id: 1,
-      firstname: "Alice",
-      lastname: "Lice",
-      email: "alice@example.com",
-      phone: "123-456-7890",
-      index: "12923",
-      fos: "ITE",
-      section: "some",
-    },
-    {
-      id: 2,
-      firstname: "Bob",
-      lastname: "Ob",
-      email: "bo@example.com",
-      phone: "987-456-7890",
-      index: "32132",
-      fos: "ITE",
-      section: "some",
-    },
-  ]);
+export default function FinanceWrapper({ workers }: FinanceWrapperProps) {
+  // generate fake data
+  const initialExpenses = getFinance();
+  const initialRevenues = getFinance();
 
-  const columns = [
-    { header: "ID", accessor: "id" },
-    { header: "First Name", accessor: "firstname" },
-    { header: "Last Name", accessor: "lastname" },
-    { header: "Email", accessor: "email" },
-    { header: "Phone", accessor: "phone" },
-    { header: "Index", accessor: "index" },
-    { header: "Field of Study", accessor: "fos" },
-    { header: "Section", accessor: "section" },
-  ];
+  // state for expenses
+  const [expenses, setExpenses] = useState<FinanceEntry[]>(initialExpenses);
+  const [editedExpenses, setEditedExpenses] =
+    useState<FinanceEntry[]>(initialExpenses);
+  const [selectedExpenses, setSelectedExpenses] = useState<number[]>([]);
 
-  const handleDelete = () => {
-    if (selectedRow !== null) {
-      setData(data.filter((_, i) => i !== selectedRow));
-      onRowSelect(null); // clear selection
+  // state for revenues
+  const [revenues, setRevenues] = useState<FinanceEntry[]>(initialRevenues);
+  const [editedRevenues, setEditedRevenues] =
+    useState<FinanceEntry[]>(initialRevenues);
+  const [selectedRevenues, setSelectedRevenues] = useState<number[]>([]);
+
+  // shared state
+  const [isEditing, setIsEditing] = useState(false);
+
+  // === Handlers for ButtonHolder ===
+  const handleEdit = () => {
+    setEditedExpenses([...expenses]);
+    setEditedRevenues([...revenues]);
+    setIsEditing(true);
+  };
+
+  const handleApply = () => {
+    setExpenses([...editedExpenses]);
+    setRevenues([...editedRevenues]);
+    setIsEditing(false);
+  };
+
+  const handleCancel = () => {
+    setEditedExpenses([...expenses]);
+    setEditedRevenues([...revenues]);
+    setIsEditing(false);
+  };
+
+  // --- Add/Delete helpers ---
+  const createNewEntry = (): FinanceEntry => ({
+    id: Date.now() + Math.floor(Math.random() * 1000),
+    name: "",
+    amount: 0,
+    workerId: null,
+  });
+
+  const handleAddEntry = (type: "expense" | "revenue") => {
+    const newEntry = createNewEntry();
+    if (type === "expense") {
+      setEditedExpenses([...editedExpenses, newEntry]);
+    } else {
+      setEditedRevenues([...editedRevenues, newEntry]);
+    }
+  };
+
+  const handleDelete = (type: "expense" | "revenue") => {
+    if (type === "expense" && selectedExpenses.length > 0) {
+      setExpenses(expenses.filter((e) => !selectedExpenses.includes(e.id)));
+      setEditedExpenses(
+        editedExpenses.filter((e) => !selectedExpenses.includes(e.id))
+      );
+      setSelectedExpenses([]);
+    }
+    if (type === "revenue" && selectedRevenues.length > 0) {
+      setRevenues(revenues.filter((r) => !selectedRevenues.includes(r.id)));
+      setEditedRevenues(
+        editedRevenues.filter((r) => !selectedRevenues.includes(r.id))
+      );
+      setSelectedRevenues([]);
     }
   };
 
   return (
-    <DataTable
-      columns={columns}
-      data={data}
-      onRowSelect={onRowSelect}
-      onDelete={handleDelete}
-    />
+    <div className="finance-wrapper">
+      <div className="finance-tables">
+        <FinanceTable
+          title="Expenses"
+          type="expense"
+          workers={workers}
+          data={expenses}
+          editedData={editedExpenses}
+          setEditedData={setEditedExpenses}
+          selectedRows={selectedExpenses}
+          setSelectedRows={setSelectedExpenses}
+          isEditing={isEditing}
+          onAdd={() => handleAddEntry("expense")}
+        />
+
+        <div className="divider" />
+
+        <FinanceTable
+          title="Revenues"
+          type="revenue"
+          workers={workers}
+          data={revenues}
+          editedData={editedRevenues}
+          setEditedData={setEditedRevenues}
+          selectedRows={selectedRevenues}
+          setSelectedRows={setSelectedRevenues}
+          isEditing={isEditing}
+          onAdd={() => handleAddEntry("revenue")}
+        />
+      </div>
+
+      <ButtonHolder
+        hasSelection={
+          selectedExpenses.length > 0 || selectedRevenues.length > 0
+        }
+        isEditing={isEditing}
+        onEdit={handleEdit}
+        onApply={handleApply}
+        onCancel={handleCancel}
+        onDelete={() => {
+          handleDelete("expense");
+          handleDelete("revenue");
+        }}
+      />
+    </div>
   );
 }

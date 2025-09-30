@@ -1,76 +1,119 @@
 import * as React from "react";
 import { type Worker } from "./Workers";
 
-export interface AttendanceColumnEntry {
-  date: string;
-  isDateValid: boolean;
+export interface AttendanceEntry {
+  present: boolean;
+  comment: string;
 }
 
 export interface AttendanceRecord {
   workerId: number;
-  dates: {
-    [date: string]: AttendanceColumnEntry;
-  };
+  dates: { [date: string]: AttendanceEntry };
 }
 
-export interface AttendanceTableProps {
+export interface AttendanceColumn {
+  date: string;
+  isDateValid: boolean;
+}
+
+interface AttendanceTableProps {
   workers: Worker[];
 }
 
-export function AttendanceTable({ workers }: AttendanceTableProps) {
-  const [columns, setColumns] = React.useState<AttendanceColumnEntry[]>([
+export default function AttendanceTable({ workers }: AttendanceTableProps) {
+  const [columns, setColumns] = React.useState<AttendanceColumn[]>([
     { date: "", isDateValid: true },
   ]);
 
   const [records, setRecords] = React.useState<AttendanceRecord[]>(
-    workers.map((w) => ({ workerId: w.id }))
+    workers.map((w) => ({
+      workerId: w.id,
+      dates: {},
+    }))
   );
 
-  const handleDateChange = (colIndex: number, value: string) => {
+  const handleDateChange = (colIndex: number, newDate: string) => {
     const regex = /^\d{4}-\d{2}-\d{2}$/; // YYYY-MM-DD
-    const isValid = regex.test(value) && !isNaN(Date.parse(value));
+    const isValid = regex.test(newDate) && !isNaN(Date.parse(newDate));
+
+    const oldDate = columns[colIndex].date;
 
     setColumns((prev) =>
       prev.map((c, i) =>
-        i === colIndex ? { ...c, date: value, isDateValid: isValid } : c
+        i === colIndex ? { ...c, date: newDate, isDateValid: isValid } : c
+      )
+    );
+
+    // Move existing data if renaming
+    if (oldDate && newDate && oldDate !== newDate) {
+      setRecords((prev) =>
+        prev.map((r) => {
+          if (r.dates[oldDate]) {
+            const { [oldDate]: oldEntry, ...rest } = r.dates;
+            return {
+              ...r,
+              dates: {
+                ...rest,
+                [newDate]: oldEntry,
+              },
+            };
+          }
+          return r;
+        })
+      );
+    }
+  };
+
+  // logic for togglePresent and updateComment
+  const updateAttendance = (
+    workerId: number,
+    date: string,
+    updater: (entry: AttendanceEntry) => AttendanceEntry
+  ) => {
+    setRecords((prev) =>
+      prev.map((r) =>
+        r.workerId === workerId
+          ? {
+              ...r,
+              dates: {
+                ...r.dates,
+                [date]: updater(
+                  r.dates[date] ?? { present: false, comment: "" }
+                ),
+              },
+            }
+          : r
       )
     );
   };
 
   const togglePresent = (workerId: number, date: string) => {
-    setRecords((prev) =>
-      prev.map((r) =>
-        r.workerId === workerId
-          ? {
-              ...r,
-              [date]: {
-                present: !(r[date]?.present ?? false),
-                comment: r[date]?.comment ?? "",
-              },
-            }
-          : r
-      )
-    );
+    updateAttendance(workerId, date, (entry) => ({
+      ...entry,
+      present: !entry.present,
+    }));
   };
 
   const updateComment = (workerId: number, date: string, value: string) => {
-    setRecords((prev) =>
-      prev.map((r) =>
-        r.workerId === workerId
-          ? {
-              ...r,
-              [date]: {
-                present: r[date]?.present ?? false,
-                comment: value,
-              },
-            }
-          : r
-      )
-    );
+    updateAttendance(workerId, date, (entry) => ({
+      ...entry,
+      comment: value,
+    }));
   };
 
   const addDateColumn = () => {
-    setColumns([...columns, { date: "", isDateValid: true }]);
+    const newDate = "";
+    setColumns([...columns, { date: newDate, isDateValid: true }]);
+
+    setRecords((prev) =>
+      prev.map((r) => ({
+        ...r,
+        dates: {
+          ...r.dates,
+          [newDate]: r.dates[newDate] ?? { present: false, comment: "" },
+        },
+      }))
+    );
   };
 
   return (
@@ -97,10 +140,7 @@ export function AttendanceTable({ workers }: AttendanceTableProps) {
                     }`}
                   />
                   {colIndex === columns.length - 1 && (
-                    <button
-                      onClick={addDateColumn}
-                      className="px-2 py-1 bg-green-500 text-white rounded"
-                    >
+                    <button onClick={addDateColumn} className="add-date">
                       +
                     </button>
                   )}
@@ -112,10 +152,16 @@ export function AttendanceTable({ workers }: AttendanceTableProps) {
             <th></th>
             {columns.map((_, colIndex) => (
               <>
-                <th key={`present-${colIndex}`} className="border px-2 py-1">
+                <th
+                  key={`present-${colIndex}`}
+                  className="presence-table-header"
+                >
                   Present
                 </th>
-                <th key={`comment-${colIndex}`} className="border px-2 py-1">
+                <th
+                  key={`comment-${colIndex}`}
+                  className="presence-table-header"
+                >
                   Comment
                 </th>
               </>
@@ -123,57 +169,52 @@ export function AttendanceTable({ workers }: AttendanceTableProps) {
           </tr>
         </thead>
         <tbody>
-          {workers.map((worker) => (
-            <tr key={worker.id}>
-              <td className="border px-2 py-1">
-                {worker.name} {worker.surname}
-              </td>
-              {columns.map((col, colIndex) => (
-                <>
-                  <td
-                    key={`check-${worker.id}-${colIndex}`}
-                    className="border px-2 py-1 text-center"
-                  >
-                    <input
-                      type="checkbox"
-                      checked={
-                        records.find((r) => r.workerId === worker.id)?.[
-                          col.date
-                        ]?.present ?? false
-                      }
-                      onChange={() => togglePresent(worker.id, col.date)}
-                      disabled={!col.date || !col.isDateValid}
-                    />
-                  </td>
-                  <td
-                    key={`comment-${worker.id}-${colIndex}`}
-                    className="border px-2 py-1"
-                  >
-                    <input
-                      type="text"
-                      value={
-                        records.find((r) => r.workerId === worker.id)?.[
-                          col.date
-                        ]?.comment ?? ""
-                      }
-                      onChange={(e) =>
-                        updateComment(worker.id, col.date, e.target.value)
-                      }
-                      disabled={!col.date || !col.isDateValid}
-                      placeholder="Optional"
-                      className="w-full border px-1"
-                    />
-                  </td>
-                </>
-              ))}
-            </tr>
-          ))}
+          {workers.map((worker) => {
+            const record = records.find((r) => r.workerId === worker.id)!;
+            return (
+              <tr key={worker.id}>
+                <td className="border px-2 py-1">
+                  {worker.name} {worker.surname}
+                </td>
+                {columns.map((col, colIndex) => (
+                  <>
+                    <td
+                      key={`check-${worker.id}-${colIndex}`}
+                      className="border px-2 py-1 text-center"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={record.dates[col.date]?.present ?? false}
+                        onChange={() => togglePresent(worker.id, col.date)}
+                        disabled={!col.date || !col.isDateValid}
+                      />
+                    </td>
+                    <td
+                      key={`comment-${worker.id}-${colIndex}`}
+                      className="border px-2 py-1"
+                    >
+                      <input
+                        type="text"
+                        value={record.dates[col.date]?.comment ?? ""}
+                        onChange={(e) =>
+                          updateComment(worker.id, col.date, e.target.value)
+                        }
+                        disabled={!col.date || !col.isDateValid}
+                        placeholder="Optional"
+                        className="w-full border px-1"
+                      />
+                    </td>
+                  </>
+                ))}
+              </tr>
+            );
+          })}
         </tbody>
       </table>
 
-      {/* Show error if any date is invalid */}
+      {/* Error message */}
       {columns.some((c) => !c.isDateValid) && (
-        <p className="text-red-500 mt-2">
+        <p className="incorrect-date-alert">
           ❌ Please enter valid dates in YYYY-MM-DD format.
         </p>
       )}

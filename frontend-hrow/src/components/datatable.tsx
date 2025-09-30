@@ -1,136 +1,238 @@
 import { useState } from "react";
-
-export interface Column<T> {
-  header: string;
-  accessor: keyof T;
-  sortable?: boolean; // allow disabling sorting per column
+import { type Worker } from "../tables/Workers";
+export interface FinanceEntry {
+  id: number;
+  name: string;
+  amount: number;
+  workerId: number | null; // responsible worker
 }
 
-interface DataTableProps<T> {
-  columns: Column<T>[];
-  data: T[];
+type FinanceType = "expense" | "revenue";
+
+interface FinanceTableProps {
+  title: string;
+  type: FinanceType;
+  workers: Worker[];
+  data: FinanceEntry[];
+  // setData: (data: FinanceEntry[]) => void;
   selectedRows: number[];
   setSelectedRows: (rows: number[]) => void;
-  setData: (data: T[]) => void;
   isEditing: boolean;
-  editedData: T[];
-  setEditedData: (data: T[]) => void;
+  editedData: FinanceEntry[];
+  setEditedData: (data: FinanceEntry[]) => void;
+  onAdd: () => void;
 }
 
-export default function DataTable<T extends { [key: string]: any }>({
-  columns,
+export default function FinanceTable({
+  title,
+  type,
+  workers,
   data,
+  // setData,
   selectedRows,
   setSelectedRows,
-  setData,
   isEditing,
   editedData,
   setEditedData,
-}: DataTableProps<T>) {
+  onAdd,
+}: FinanceTableProps) {
   const [sortConfig, setSortConfig] = useState<{
-    key: keyof T | null;
+    key: keyof FinanceEntry | "__selected__" | null;
     direction: "asc" | "desc";
   }>({ key: null, direction: "asc" });
 
-  // Sorting
-  const sortedRows = [...data].sort((a, b) => {
-    if (!sortConfig.key) return 0;
-    const col = columns.find((c) => c.accessor === sortConfig.key);
-    if (col && col.sortable === false) return 0;
+  const toggleSelected = (id: number) => {
+    setSelectedRows(
+      selectedRows.includes(id)
+        ? selectedRows.filter((x) => x !== id)
+        : [...selectedRows, id]
+    );
+  };
 
-    const x = a[sortConfig.key];
-    const y = b[sortConfig.key];
-    if (x < y) return sortConfig.direction === "asc" ? -1 : 1;
-    if (x > y) return sortConfig.direction === "asc" ? 1 : -1;
-    return 0;
-  });
+  // I should look into separating the logic into a new function, as it's basically the same
 
-  const handleSort = (key: keyof T) => {
-    const col = columns.find((c) => c.accessor === key);
-    if (col && col.sortable === false) return; // skip
+  const handleSort = (key: keyof FinanceEntry | "__selected__") => {
     setSortConfig((prev) => ({
       key,
       direction: prev.key === key && prev.direction === "asc" ? "desc" : "asc",
     }));
   };
 
-  const handleCheckbox = (rowIndex: number) => {
-    let updatedSelection: number[];
-    if (selectedRows.includes(rowIndex)) {
-      updatedSelection = selectedRows.filter((i) => i !== rowIndex);
-    } else {
-      updatedSelection = [...selectedRows, rowIndex];
+  const sortedRows = [...(isEditing ? editedData : data)].sort((a, b) => {
+    const key = sortConfig.key;
+    if (!key) return 0;
+
+    if (key === "__selected__") {
+      const aSel = selectedRows.includes(a.id);
+      const bSel = selectedRows.includes(b.id);
+      if (aSel === bSel) return 0;
+      return sortConfig.direction === "asc" ? (aSel ? -1 : 1) : aSel ? 1 : -1;
     }
-    setSelectedRows(updatedSelection);
-  };
+
+    const x = a[key];
+    const y = b[key];
+    if (x == null && y == null) return 0;
+    if (x == null) return sortConfig.direction === "asc" ? -1 : 1;
+    if (y == null) return sortConfig.direction === "asc" ? 1 : -1;
+
+    if (typeof x === "number" && typeof y === "number") {
+      return sortConfig.direction === "asc" ? x - y : y - x;
+    }
+
+    const xs = String(x).toLowerCase();
+    const ys = String(y).toLowerCase();
+    if (xs < ys) return sortConfig.direction === "asc" ? -1 : 1;
+    if (xs > ys) return sortConfig.direction === "asc" ? 1 : -1;
+    return 0;
+  });
 
   const handleEditChange = (
     rowIndex: number,
-    accessor: keyof T,
-    value: string
+    key: keyof FinanceEntry,
+    value: string | number | null
   ) => {
     const updated = [...editedData];
-    updated[rowIndex] = { ...updated[rowIndex], [accessor]: value };
+    updated[rowIndex] = {
+      ...updated[rowIndex],
+      [key]:
+        key === "amount"
+          ? Number(value)
+          : key === "workerId"
+          ? (value as number | null)
+          : value,
+    };
     setEditedData(updated);
   };
 
+  const columns: {
+    header: string;
+    key: keyof FinanceEntry;
+    sortable?: boolean;
+    editable?: boolean;
+  }[] = [
+    { header: "Name", key: "name", editable: true },
+    { header: "Amount", key: "amount", editable: true },
+    { header: "Responsible", key: "workerId", editable: true },
+  ];
+
   return (
-    <table className="w-full border-collapse border border-gray-300">
-      <thead className="bg-gray-200">
-        <tr>
-          <th className="border px-2 py-1">✔</th>
-          {columns.map((col) => (
+    <div className="finance-wrapper">
+      <h2>{title}</h2>
+      <table className={`finance-${type}`}>
+        <thead>
+          <tr>
             <th
-              key={col.accessor as string}
-              className={`border px-2 py-1 text-left ${
-                col.sortable === false ? "" : "cursor-pointer select-none"
-              }`}
-              onClick={() => handleSort(col.accessor)}
+              className="select-column"
+              onClick={() => handleSort("__selected__")}
             >
-              {col.header}
-              {sortConfig.key === col.accessor &&
+              ✔
+              {sortConfig.key === "__selected__" &&
                 (sortConfig.direction === "asc" ? " ▲" : " ▼")}
             </th>
-          ))}
-        </tr>
-      </thead>
-      <tbody>
-        {sortedRows.map((row, rowIndex) => (
-          <tr
-            key={rowIndex}
-            className={`${
-              selectedRows.includes(rowIndex) ? "bg-blue-100" : ""
-            }`}
-          >
-            {/* Checkbox */}
-            <td className="border px-2 py-1 text-center">
-              <input
-                type="checkbox"
-                checked={selectedRows.includes(rowIndex)}
-                onChange={() => handleCheckbox(rowIndex)}
-              />
-            </td>
-
-            {/* Data cells */}
             {columns.map((col) => (
-              <td key={col.accessor as string} className="border px-2 py-1">
-                {isEditing ? (
-                  <input
-                    type="text"
-                    value={editedData[rowIndex][col.accessor]}
-                    onChange={(e) =>
-                      handleEditChange(rowIndex, col.accessor, e.target.value)
-                    }
-                    className="w-full border px-1"
-                  />
-                ) : (
-                  row[col.accessor]
-                )}
-              </td>
+              <th
+                key={col.key}
+                className={col.sortable === false ? "" : "sortable"}
+                onClick={() =>
+                  col.sortable === false ? undefined : handleSort(col.key)
+                }
+              >
+                {col.header}
+                {sortConfig.key === col.key &&
+                  (sortConfig.direction === "asc" ? " ▲" : " ▼")}
+              </th>
             ))}
           </tr>
-        ))}
-      </tbody>
-    </table>
+        </thead>
+        <tbody>
+          {sortedRows.map((row, i) => (
+            <tr
+              key={row.id}
+              className={selectedRows.includes(row.id) ? "selected-row" : ""}
+            >
+              <td className="select-cell">
+                <input
+                  type="checkbox"
+                  checked={selectedRows.includes(row.id)}
+                  onChange={() => toggleSelected(row.id)}
+                />
+              </td>
+              {columns.map((col) => (
+                <td key={col.key} className="data-cell">
+                  {isEditing && col.editable ? (
+                    col.key === "workerId" ? (
+                      <select
+                        value={editedData[i]?.workerId ?? ""}
+                        onChange={(e) =>
+                          handleEditChange(
+                            i,
+                            "workerId",
+                            e.target.value ? Number(e.target.value) : null
+                          )
+                        }
+                      >
+                        <option value="">-- None --</option>
+                        {workers.map((w) => (
+                          <option key={w.id} value={w.id}>
+                            {w.name} {w.surname}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <input
+                        type={col.key === "amount" ? "number" : "text"}
+                        value={editedData[i]?.[col.key] ?? ""}
+                        onChange={(e) =>
+                          handleEditChange(i, col.key, e.target.value)
+                        }
+                        className={
+                          col.key === "amount"
+                            ? type === "expense"
+                              ? "amount-expense"
+                              : "amount-revenue"
+                            : ""
+                        }
+                      />
+                    )
+                  ) : col.key === "workerId" ? (
+                    workers.find((w) => w.id === row.workerId) ? (
+                      `${workers.find((w) => w.id === row.workerId)!.name} ${
+                        workers.find((w) => w.id === row.workerId)!.surname
+                      }`
+                    ) : (
+                      "—"
+                    )
+                  ) : (
+                    <span
+                      className={
+                        col.key === "amount"
+                          ? type === "expense"
+                            ? "amount-expense"
+                            : "amount-revenue"
+                          : ""
+                      }
+                    >
+                      {row[col.key]}
+                    </span>
+                  )}
+                </td>
+              ))}
+            </tr>
+          ))}
+
+          {isEditing && (
+            <tfoot>
+              <tr>
+                <td colSpan={columns.length + 1}>
+                  <button type="button" onClick={onAdd}>
+                    ➕ Add {type === "expense" ? "Expense" : "Revenue"}
+                  </button>
+                </td>
+              </tr>
+            </tfoot>
+          )}
+        </tbody>
+      </table>
+    </div>
   );
 }
