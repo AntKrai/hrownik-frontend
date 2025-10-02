@@ -1,5 +1,5 @@
-import { useState } from "react";
 import type { Worker } from "./Workers";
+import { useTableSort } from "../helpers/handleSort";
 
 export interface Partner {
   id: number;
@@ -22,9 +22,6 @@ interface PartnersTableProps {
   handleAddEntry: () => void;
 }
 
-type SortKey = keyof Partner | "__selected__" | null;
-type SortDirection = "asc" | "desc";
-
 export default function PartnersTable({
   workers,
   selectedRows,
@@ -35,10 +32,10 @@ export default function PartnersTable({
   data,
   handleAddEntry,
 }: PartnersTableProps) {
-  const [sortConfig, setSortConfig] = useState<{
-    key: SortKey;
-    direction: SortDirection;
-  }>({ key: null, direction: "asc" });
+  const { sortedRows, handleSort, sortConfig } = useTableSort(
+    isEditing ? editedData : data,
+    selectedRows
+  );
 
   const toggleSelected = (id: number) => {
     setSelectedRows(
@@ -47,42 +44,6 @@ export default function PartnersTable({
         : [...selectedRows, id]
     );
   };
-
-  const handleSort = (key: SortKey) => {
-    setSortConfig((prev) => ({
-      key,
-      direction: prev.key === key && prev.direction === "asc" ? "desc" : "asc",
-    }));
-  };
-
-  const sortedRows = [...(isEditing ? editedData : data)].sort((a, b) => {
-    const key = sortConfig.key;
-    if (!key) return 0;
-
-    if (key === "__selected__") {
-      const aSel = selectedRows.includes(a.id);
-      const bSel = selectedRows.includes(b.id);
-      if (aSel === bSel) return 0;
-      return sortConfig.direction === "asc" ? (aSel ? -1 : 1) : aSel ? 1 : -1;
-    }
-
-    const x = a[key as keyof Partner];
-    const y = b[key as keyof Partner];
-    if (x == null && y == null) return 0;
-    if (x == null) return sortConfig.direction === "asc" ? -1 : 1;
-    if (y == null) return sortConfig.direction === "asc" ? 1 : -1;
-
-    if (typeof x === "number" && typeof y === "number") {
-      return sortConfig.direction === "asc" ? x - y : y - x;
-    }
-
-    const xs = String(x).toLowerCase();
-    const ys = String(y).toLowerCase();
-    if (xs < ys) return sortConfig.direction === "asc" ? -1 : 1;
-    if (xs > ys) return sortConfig.direction === "asc" ? 1 : -1;
-    return 0;
-  });
-
   const handleEditChange = (
     rowIndex: number,
     key: keyof Partner,
@@ -92,19 +53,6 @@ export default function PartnersTable({
     updated[rowIndex] = { ...updated[rowIndex], [key]: value };
     setEditedData(updated);
   };
-
-  // const handleAddEntry = () => {
-  //   const newEntry: Partner = {
-  //     id: Date.now(),
-  //     name: "",
-  //     workerId: null,
-  //     phone: "",
-  //     email: "",
-  //     status: "Pending",
-  //     comment: "",
-  //   };
-  //   setEditedData([...editedData, newEntry]);
-  // };
 
   const columns: {
     header: string;

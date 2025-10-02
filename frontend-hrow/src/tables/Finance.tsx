@@ -1,131 +1,199 @@
-import { useState } from "react";
-import ButtonHolder from "../components/ButtonHolder";
-import FinanceTable, { type FinanceEntry } from "../components/Datatable";
-import type { Worker } from "./Workers";
-import { getFinance } from "../helpers/getData"; // <- your faker helper
-
-interface FinanceWrapperProps {
-  workers: Worker[];
+import { type Worker } from "./Workers";
+import { useTableSort } from "../helpers/handleSort";
+export interface FinanceEntry {
+  id: number;
+  name: string;
+  amount: number;
+  workerId: number | null; // responsible worker
 }
 
-export default function FinanceWrapper({ workers }: FinanceWrapperProps) {
-  // generate fake data
-  const initialExpenses = getFinance();
-  const initialRevenues = getFinance();
+type FinanceType = "expense" | "revenue";
 
-  // state for expenses
-  const [expenses, setExpenses] = useState<FinanceEntry[]>(initialExpenses);
-  const [editedExpenses, setEditedExpenses] =
-    useState<FinanceEntry[]>(initialExpenses);
-  const [selectedExpenses, setSelectedExpenses] = useState<number[]>([]);
+interface FinanceTableProps {
+  title: string;
+  type: FinanceType;
+  workers: Worker[];
+  data: FinanceEntry[];
+  selectedRows: number[];
+  setSelectedRows: (rows: number[]) => void;
+  isEditing: boolean;
+  editedData: FinanceEntry[];
+  setEditedData: (data: FinanceEntry[]) => void;
+  onAdd: () => void;
+}
 
-  // state for revenues
-  const [revenues, setRevenues] = useState<FinanceEntry[]>(initialRevenues);
-  const [editedRevenues, setEditedRevenues] =
-    useState<FinanceEntry[]>(initialRevenues);
-  const [selectedRevenues, setSelectedRevenues] = useState<number[]>([]);
+export default function FinanceTable({
+  title,
+  type,
+  workers,
+  data,
+  // setData,
+  selectedRows,
+  setSelectedRows,
+  isEditing,
+  editedData,
+  setEditedData,
+  onAdd,
+}: FinanceTableProps) {
+  const toggleSelected = (id: number) => {
+    setSelectedRows(
+      selectedRows.includes(id)
+        ? selectedRows.filter((x) => x !== id)
+        : [...selectedRows, id]
+    );
+  };
+  const { sortedRows, handleSort, sortConfig } = useTableSort<FinanceEntry>(
+    isEditing ? editedData : data,
+    selectedRows
+  );
 
-  // shared state
-  const [isEditing, setIsEditing] = useState(false);
-
-  // === Handlers for ButtonHolder ===
-  const handleEdit = () => {
-    setEditedExpenses([...expenses]);
-    setEditedRevenues([...revenues]);
-    setIsEditing(true);
+  const handleEditChange = (
+    rowIndex: number,
+    key: keyof FinanceEntry,
+    value: string | number | null
+  ) => {
+    const updated = [...editedData];
+    updated[rowIndex] = {
+      ...updated[rowIndex],
+      [key]:
+        key === "amount"
+          ? Number(value)
+          : key === "workerId"
+          ? (value as number | null)
+          : value,
+    };
+    setEditedData(updated);
   };
 
-  const handleApply = () => {
-    setExpenses([...editedExpenses]);
-    setRevenues([...editedRevenues]);
-    setIsEditing(false);
-  };
-
-  const handleCancel = () => {
-    setEditedExpenses([...expenses]);
-    setEditedRevenues([...revenues]);
-    setIsEditing(false);
-  };
-
-  // --- Add/Delete helpers ---
-  const createNewEntry = (): FinanceEntry => ({
-    id: Date.now() + Math.floor(Math.random() * 1000),
-    name: "",
-    amount: 0,
-    workerId: null,
-  });
-
-  const handleAddEntry = (type: "expense" | "revenue") => {
-    const newEntry = createNewEntry();
-    if (type === "expense") {
-      setEditedExpenses([...editedExpenses, newEntry]);
-    } else {
-      setEditedRevenues([...editedRevenues, newEntry]);
-    }
-  };
-
-  const handleDelete = (type: "expense" | "revenue") => {
-    if (type === "expense" && selectedExpenses.length > 0) {
-      setExpenses(expenses.filter((e) => !selectedExpenses.includes(e.id)));
-      setEditedExpenses(
-        editedExpenses.filter((e) => !selectedExpenses.includes(e.id))
-      );
-      setSelectedExpenses([]);
-    }
-    if (type === "revenue" && selectedRevenues.length > 0) {
-      setRevenues(revenues.filter((r) => !selectedRevenues.includes(r.id)));
-      setEditedRevenues(
-        editedRevenues.filter((r) => !selectedRevenues.includes(r.id))
-      );
-      setSelectedRevenues([]);
-    }
-  };
+  const columns: {
+    header: string;
+    key: keyof FinanceEntry;
+    sortable?: boolean;
+    editable?: boolean;
+  }[] = [
+    { header: "Name", key: "name", editable: true },
+    { header: "Amount", key: "amount", editable: true },
+    { header: "Responsible", key: "workerId", editable: true },
+  ];
 
   return (
     <div className="finance-wrapper">
-      <div className="finance-tables">
-        <FinanceTable
-          title="Expenses"
-          type="expense"
-          workers={workers}
-          data={expenses}
-          editedData={editedExpenses}
-          setEditedData={setEditedExpenses}
-          selectedRows={selectedExpenses}
-          setSelectedRows={setSelectedExpenses}
-          isEditing={isEditing}
-          onAdd={() => handleAddEntry("expense")}
-        />
+      <h2>{title}</h2>
+      <table className={`finance-${type}`}>
+        <thead>
+          <tr>
+            <th
+              className="select-column"
+              onClick={() => handleSort("__selected__")}
+            >
+              ✔
+              {sortConfig.key === "__selected__" &&
+                (sortConfig.direction === "asc" ? " ▲" : " ▼")}
+            </th>
+            {columns.map((col) => (
+              <th
+                key={col.key}
+                className={col.sortable === false ? "" : "sortable"}
+                onClick={() =>
+                  col.sortable === false ? undefined : handleSort(col.key)
+                }
+              >
+                {col.header}
+                {sortConfig.key === col.key &&
+                  (sortConfig.direction === "asc" ? " ▲" : " ▼")}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {sortedRows.map((row, i) => (
+            <tr
+              key={row.id}
+              className={selectedRows.includes(row.id) ? "selected-row" : ""}
+            >
+              <td className="select-cell">
+                <input
+                  type="checkbox"
+                  checked={selectedRows.includes(row.id)}
+                  onChange={() => toggleSelected(row.id)}
+                />
+              </td>
+              {columns.map((col) => (
+                <td key={col.key} className="data-cell">
+                  {isEditing && col.editable ? (
+                    col.key === "workerId" ? (
+                      <select
+                        value={editedData[i]?.workerId ?? ""}
+                        onChange={(e) =>
+                          handleEditChange(
+                            i,
+                            "workerId",
+                            e.target.value ? Number(e.target.value) : null
+                          )
+                        }
+                      >
+                        <option value="">-- None --</option>
+                        {workers.map((w) => (
+                          <option key={w.id} value={w.id}>
+                            {w.name} {w.surname}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <input
+                        type={col.key === "amount" ? "number" : "text"}
+                        value={editedData[i]?.[col.key] ?? ""}
+                        onChange={(e) =>
+                          handleEditChange(i, col.key, e.target.value)
+                        }
+                        className={
+                          col.key === "amount"
+                            ? type === "expense"
+                              ? "amount-expense"
+                              : "amount-revenue"
+                            : ""
+                        }
+                      />
+                    )
+                  ) : col.key === "workerId" ? (
+                    workers.find((w) => w.id === row.workerId) ? (
+                      `${workers.find((w) => w.id === row.workerId)!.name} ${
+                        workers.find((w) => w.id === row.workerId)!.surname
+                      }`
+                    ) : (
+                      "—"
+                    )
+                  ) : (
+                    <span
+                      className={
+                        col.key === "amount"
+                          ? type === "expense"
+                            ? "amount-expense"
+                            : "amount-revenue"
+                          : ""
+                      }
+                    >
+                      {row[col.key]}
+                    </span>
+                  )}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
 
-        <div className="divider" />
-
-        <FinanceTable
-          title="Revenues"
-          type="revenue"
-          workers={workers}
-          data={revenues}
-          editedData={editedRevenues}
-          setEditedData={setEditedRevenues}
-          selectedRows={selectedRevenues}
-          setSelectedRows={setSelectedRevenues}
-          isEditing={isEditing}
-          onAdd={() => handleAddEntry("revenue")}
-        />
-      </div>
-
-      <ButtonHolder
-        hasSelection={
-          selectedExpenses.length > 0 || selectedRevenues.length > 0
-        }
-        isEditing={isEditing}
-        onEdit={handleEdit}
-        onApply={handleApply}
-        onCancel={handleCancel}
-        onDelete={() => {
-          handleDelete("expense");
-          handleDelete("revenue");
-        }}
-      />
+        {isEditing && (
+          <tfoot>
+            <tr>
+              <td colSpan={columns.length + 1}>
+                <button type="button" onClick={onAdd}>
+                  ➕ Add {type === "expense" ? "Expense" : "Revenue"}
+                </button>
+              </td>
+            </tr>
+          </tfoot>
+        )}
+      </table>
     </div>
   );
 }
