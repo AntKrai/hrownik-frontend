@@ -27,7 +27,6 @@ export default function FinanceTable({
   type,
   workers,
   data,
-  // setData,
   selectedRows,
   setSelectedRows,
   isEditing,
@@ -119,7 +118,7 @@ export default function FinanceTable({
                 />
               </td>
               {columns.map((col) => (
-                <td key={col.key} className="data-cell">
+                <td key={col.key} className={`data-cell column-${col.key}`}>
                   {isEditing && col.editable ? (
                     col.key === "workerId" ? (
                       <select
@@ -186,7 +185,7 @@ export default function FinanceTable({
           <tfoot>
             <tr>
               <td colSpan={columns.length + 1}>
-                <button type="button" onClick={onAdd}>
+                <button className="add-btn" type="button" onClick={onAdd}>
                   ➕ Add {type === "expense" ? "Expense" : "Revenue"}
                 </button>
               </td>

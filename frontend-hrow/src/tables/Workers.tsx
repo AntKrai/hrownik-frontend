@@ -133,7 +133,7 @@ export default function WorkersTable({
         </tbody>
       </table>
       {isEditing && (
-        <button className="add-worker-btn" onClick={handleAddEntry}>
+        <button className="add-btn" onClick={handleAddEntry}>
           ➕ Add Worker
         </button>
       )}

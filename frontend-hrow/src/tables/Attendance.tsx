@@ -1,5 +1,5 @@
 import * as React from "react";
-import { type Worker } from "./Workers";
+import type { Worker } from "./Workers";
 
 export interface AttendanceEntry {
   present: boolean;
@@ -18,68 +18,111 @@ export interface AttendanceColumn {
 
 interface AttendanceTableProps {
   workers: Worker[];
+
+  // saved state (persisted)
+  columns: AttendanceColumn[];
+  setColumns: (cols: AttendanceColumn[]) => void;
+  records: AttendanceRecord[];
+  setRecords: (recs: AttendanceRecord[]) => void;
+
+  // draft state (for editing / Apply/Cancel)
+  editedColumns: AttendanceColumn[];
+  setEditedColumns: (cols: AttendanceColumn[]) => void;
+  editedRecords: AttendanceRecord[];
+  setEditedRecords: (recs: AttendanceRecord[]) => void;
+
+  // editing flag (from parent ButtonHolder flow)
+  isEditing: boolean;
+
+  // optional add-column callback (parent can provide, otherwise component will update edited state)
+  onAddColumn?: () => void;
 }
 
-export default function AttendanceTable({ workers }: AttendanceTableProps) {
-  const [columns, setColumns] = React.useState<AttendanceColumn[]>([
-    { date: "", isDateValid: true },
-  ]);
+export default function AttendanceTable({
+  workers,
+  columns,
+  setColumns,
+  records,
+  setRecords,
+  editedColumns,
+  setEditedColumns,
+  editedRecords,
+  setEditedRecords,
+  isEditing,
+  onAddColumn,
+}: AttendanceTableProps) {
+  const activeColumns = isEditing ? editedColumns : columns;
+  const activeRecords = isEditing ? editedRecords : records;
 
-  const [records, setRecords] = React.useState<AttendanceRecord[]>(
-    workers.map((w) => ({
-      workerId: w.id,
-      dates: {},
-    }))
-  );
+  const isDateValid = (d: string) => {
+    const regex = /^\d{4}-\d{2}-\d{2}$/;
+    return regex.test(d) && !isNaN(Date.parse(d));
+  };
+
+  const ensureRecordsForWorkers = (recs: AttendanceRecord[]) => {
+    const byId = new Map(recs.map((r) => [r.workerId, r]));
+    return workers.map((w) =>
+      byId.has(w.id) ? byId.get(w.id)! : { workerId: w.id, dates: {} }
+    );
+  };
 
   const handleDateChange = (colIndex: number, newDate: string) => {
-    const regex = /^\d{4}-\d{2}-\d{2}$/; // YYYY-MM-DD
-    const isValid = regex.test(newDate) && !isNaN(Date.parse(newDate));
-
-    const oldDate = columns[colIndex].date;
-
-    setColumns((prev) =>
-      prev.map((c, i) =>
-        i === colIndex ? { ...c, date: newDate, isDateValid: isValid } : c
-      )
-    );
-
-    // Move existing data if renaming
-    if (oldDate && newDate && oldDate !== newDate) {
-      setRecords((prev) =>
-        prev.map((r) => {
-          if (r.dates[oldDate]) {
-            const { [oldDate]: oldEntry, ...rest } = r.dates;
-            return {
-              ...r,
-              dates: {
-                ...rest,
-                [newDate]: oldEntry,
-              },
-            };
-          }
-          return r;
-        })
+    const valid = isDateValid(newDate);
+    if (isEditing) {
+      const oldDate = editedColumns[colIndex]?.date ?? "";
+      const next = editedColumns.map((c, i) =>
+        i === colIndex ? { ...c, date: newDate, isDateValid: valid } : c
       );
+      setEditedColumns(next);
+
+      if (oldDate && newDate && oldDate !== newDate) {
+        setEditedRecords(
+          editedRecords.map((r) => {
+            if (r.dates[oldDate]) {
+              const { [oldDate]: oldEntry, ...rest } = r.dates;
+              return { ...r, dates: { ...rest, [newDate]: oldEntry } };
+            }
+            return r;
+          })
+        );
+      }
+    } else {
+      const oldDate = columns[colIndex]?.date ?? "";
+      const next = columns.map((c, i) =>
+        i === colIndex ? { ...c, date: newDate, isDateValid: valid } : c
+      );
+      setColumns(next);
+
+      if (oldDate && newDate && oldDate !== newDate) {
+        setRecords(
+          records.map((r) => {
+            if (r.dates[oldDate]) {
+              const { [oldDate]: oldEntry, ...rest } = r.dates;
+              return { ...r, dates: { ...rest, [newDate]: oldEntry } };
+            }
+            return r;
+          })
+        );
+      }
     }
   };
 
-  // logic for togglePresent and updateComment
-  const updateAttendance = (
-    workerId: number,
-    date: string,
-    updater: (entry: AttendanceEntry) => AttendanceEntry
-  ) => {
-    setRecords((prev) =>
-      prev.map((r) =>
+  // ✅ properly closed function
+  const togglePresent = (workerId: number, date: string) => {
+    if (!isEditing) return;
+    if (!date || !isDateValid(date)) return;
+
+    setEditedRecords(
+      editedRecords.map((r) =>
         r.workerId === workerId
           ? {
               ...r,
               dates: {
                 ...r.dates,
-                [date]: updater(
-                  r.dates[date] ?? { present: false, comment: "" }
-                ),
+                [date]: {
+                  ...(r.dates[date] ?? { present: false, comment: "" }),
+                  present: !(r.dates[date]?.present ?? false),
+                },
               },
             }
           : r
@@ -87,59 +130,71 @@ export default function AttendanceTable({ workers }: AttendanceTableProps) {
     );
   };
 
-  const togglePresent = (workerId: number, date: string) => {
-    updateAttendance(workerId, date, (entry) => ({
-      ...entry,
-      present: !entry.present,
-    }));
-  };
-
+  // ✅ separate function (was nested before)
   const updateComment = (workerId: number, date: string, value: string) => {
-    updateAttendance(workerId, date, (entry) => ({
-      ...entry,
-      comment: value,
-    }));
+    if (!isEditing) return;
+    if (!date || !isDateValid(date)) return;
+
+    setEditedRecords(
+      editedRecords.map((r) =>
+        r.workerId === workerId
+          ? {
+              ...r,
+              dates: {
+                ...r.dates,
+                [date]: {
+                  ...(r.dates[date] ?? { present: false, comment: "" }),
+                  comment: value,
+                },
+              },
+            }
+          : r
+      )
+    );
   };
 
+  // ✅ separate function
   const addDateColumn = () => {
-    const newDate = "";
-    setColumns([...columns, { date: newDate, isDateValid: true }]);
-
-    setRecords((prev) =>
-      prev.map((r) => ({
+    if (onAddColumn) {
+      onAddColumn();
+      return;
+    }
+    const newCol: AttendanceColumn = { date: "", isDateValid: true };
+    setEditedColumns([...editedColumns, newCol]);
+    setEditedRecords(
+      editedRecords.map((r) => ({
         ...r,
         dates: {
           ...r.dates,
-          [newDate]: r.dates[newDate] ?? { present: false, comment: "" },
+          "": { present: false, comment: "" },
         },
       }))
     );
   };
 
+  React.useEffect(() => {
+    setRecords(ensureRecordsForWorkers(records));
+    setEditedRecords(ensureRecordsForWorkers(editedRecords));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [workers.map((w) => w.id).join(",")]);
+
   return (
-    <div>
-      <table className="w-full border-collapse border border-gray-300">
-        <thead className="bg-gray-200">
-          <tr>
-            <th className="border px-2 py-1">Full Name</th>
-            {columns.map((col, colIndex) => (
-              <th
-                key={`date-${colIndex}`}
-                colSpan={2}
-                className="border px-2 py-1 text-center"
-              >
-                <div className="flex items-center justify-center gap-2">
-                  <span>Date:</span>
+    <div className="attendance-table-wrapper">
+      <table>
+        <thead>
+          <tr className="dateEditor">
+            <th></th>
+            {activeColumns.map((col, colIndex) => (
+              <th key={`date-${colIndex}`} colSpan={2}>
+                <div>
+                  <span>Date: </span>
                   <input
                     type="text"
                     value={col.date}
                     onChange={(e) => handleDateChange(colIndex, e.target.value)}
                     placeholder="YYYY-MM-DD"
-                    className={`w-32 border px-1 ${
-                      col.isDateValid ? "border-gray-300" : "border-red-500"
-                    }`}
                   />
-                  {colIndex === columns.length - 1 && (
+                  {isEditing && colIndex === activeColumns.length - 1 && (
                     <button onClick={addDateColumn} className="add-date">
                       +
                     </button>
@@ -148,10 +203,11 @@ export default function AttendanceTable({ workers }: AttendanceTableProps) {
               </th>
             ))}
           </tr>
+
           <tr>
-            <th></th>
-            {columns.map((_, colIndex) => (
-              <>
+            <th>Full Name</th>
+            {activeColumns.map((_, colIndex) => (
+              <React.Fragment key={`hdr-${colIndex}`}>
                 <th
                   key={`present-${colIndex}`}
                   className="presence-table-header"
@@ -164,60 +220,76 @@ export default function AttendanceTable({ workers }: AttendanceTableProps) {
                 >
                   Comment
                 </th>
-              </>
+              </React.Fragment>
             ))}
           </tr>
         </thead>
+
         <tbody>
           {workers.map((worker) => {
-            const record = records.find((r) => r.workerId === worker.id)!;
+            // get the record for this worker from the appropriate array
+            const record = activeRecords.find(
+              (r) => r.workerId === worker.id
+            ) ?? {
+              workerId: worker.id,
+              dates: {},
+            };
+
             return (
               <tr key={worker.id}>
-                <td className="border px-2 py-1">
+                <td>
                   {worker.name} {worker.surname}
                 </td>
-                {columns.map((col, colIndex) => (
-                  <>
-                    <td
-                      key={`check-${worker.id}-${colIndex}`}
-                      className="border px-2 py-1 text-center"
-                    >
-                      <input
-                        type="checkbox"
-                        checked={record.dates[col.date]?.present ?? false}
-                        onChange={() => togglePresent(worker.id, col.date)}
-                        disabled={!col.date || !col.isDateValid}
-                      />
-                    </td>
-                    <td
-                      key={`comment-${worker.id}-${colIndex}`}
-                      className="border px-2 py-1"
-                    >
-                      <input
-                        type="text"
-                        value={record.dates[col.date]?.comment ?? ""}
-                        onChange={(e) =>
-                          updateComment(worker.id, col.date, e.target.value)
-                        }
-                        disabled={!col.date || !col.isDateValid}
-                        placeholder="Optional"
-                        className="w-full border px-1"
-                      />
-                    </td>
-                  </>
-                ))}
+
+                {activeColumns.map((col, colIndex) => {
+                  const dateKey = col.date;
+                  const entry = record.dates[dateKey] ?? {
+                    present: false,
+                    comment: "",
+                  };
+
+                  const canEditCell = isEditing && !!dateKey && col.isDateValid;
+
+                  return (
+                    <React.Fragment key={`cells-${worker.id}-${colIndex}`}>
+                      <td key={`check-${worker.id}-${colIndex}`}>
+                        <input
+                          type="checkbox"
+                          checked={entry.present}
+                          onChange={() => togglePresent(worker.id, dateKey)}
+                          disabled={!canEditCell}
+                        />
+                      </td>
+
+                      <td key={`comment-${worker.id}-${colIndex}`}>
+                        <input
+                          type="text"
+                          value={entry.comment}
+                          onChange={(e) =>
+                            updateComment(worker.id, dateKey, e.target.value)
+                          }
+                          placeholder="Optional"
+                          disabled={!canEditCell}
+                        />
+                      </td>
+                    </React.Fragment>
+                  );
+                })}
               </tr>
             );
           })}
         </tbody>
       </table>
 
-      {/* Error message */}
-      {columns.some((c) => !c.isDateValid) && (
+      {/* Error message: show if any active column has invalid date */}
+      {activeColumns.some((c) => !c.isDateValid) && (
         <p className="incorrect-date-alert">
           ❌ Please enter valid dates in YYYY-MM-DD format.
         </p>
       )}
+
+      {/* (If parent didn't provide onAddColumn, the local addDateColumn will update edited state) */}
+      {/* Note: Add button is rendered in the header next to the last date input when editing. */}
     </div>
   );
 }

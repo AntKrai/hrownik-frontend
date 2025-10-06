@@ -1,16 +1,21 @@
 import { useState } from "react";
+import { useEffect } from "react";
+
 import Toolbar from "./components/Menu";
 import ButtonHolder from "./components/ButtonHolder";
 
 import WorkersTable, { type Worker } from "./tables/Workers";
-import AttendanceTable from "./tables/Attendance";
+import AttendanceTable, {
+  type AttendanceColumn,
+  type AttendanceRecord,
+} from "./tables/Attendance";
 import { getData, getFinance } from "./helpers/getData";
-// import FinanceWrapper from "./wrappers/FinanceWrapper";
-// import PartnersWrapper from "./wrappers/PartnersWrapper";
 import type { FinanceEntry } from "./tables/Finance";
 import type { Partner } from "./tables/Partners";
 import FinanceTable from "./tables/Finance";
 import PartnersTable from "./tables/Partners";
+import GroupsModal, { type Group } from "./components/GroupsModal";
+import CertificatesModal from "./components/CertificatesModal";
 
 type TableType = "workers" | "attendance" | "finance" | "partners";
 
@@ -41,6 +46,57 @@ export default function TableWithToolbar() {
     useState<FinanceEntry[]>(revenues);
   const [selectedRevenues, setSelectedRevenues] = useState<number[]>([]);
 
+  //Attendance state
+  const [columns, setColumns] = useState<AttendanceColumn[]>([
+    { date: "", isDateValid: true },
+  ]);
+  const [editedColumns, setEditedColumns] = useState<AttendanceColumn[]>(() => [
+    ...columns,
+  ]);
+
+  const [records, setRecords] = useState<AttendanceRecord[]>(() =>
+    workers.map((w) => ({ workerId: w.id, dates: {} }))
+  );
+  const [editedRecords, setEditedRecords] = useState<AttendanceRecord[]>(() => [
+    ...records,
+  ]);
+
+  // Grouping state
+  const [groups, setGroups] = useState<Group[]>([]);
+  const [showGroups, setShowGroups] = useState(false);
+  // Certificates state
+  const [showCertificates, setShowCertificates] = useState(false);
+
+  const [selectedGroup, setSelectedGroup] = useState<string>("");
+
+  const handleCreateCertificate = () => {
+    if (!selectedGroup) return alert("Please select a group first.");
+    const group = groups.find((g) => g.name === selectedGroup);
+    if (!group) return alert("Group not found.");
+    alert(
+      `This will create a certificate in full version for workers: ${group.workerIds.join(
+        ", "
+      )}`
+    );
+    setShowCertificates(false);
+  };
+
+  useEffect(() => {
+    setRecords((prev) => {
+      const byId = new Map(prev.map((r) => [r.workerId, r]));
+      return workers.map((w) =>
+        byId.has(w.id) ? byId.get(w.id)! : { workerId: w.id, dates: {} }
+      );
+    });
+    setEditedRecords((prev) => {
+      const byId = new Map(prev.map((r) => [r.workerId, r]));
+      return workers.map((w) =>
+        byId.has(w.id) ? byId.get(w.id)! : { workerId: w.id, dates: {} }
+      );
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [workers.map((w) => w.id).join(",")]);
+
   // a specific handler for the finance table pair
   const hasSelection =
     activeTable === "finance"
@@ -59,6 +115,10 @@ export default function TableWithToolbar() {
       case "finance":
         setEditedExpenses([...expenses]);
         setEditedRevenues([...revenues]);
+        break;
+      case "attendance":
+        setEditedColumns([...columns]);
+        setEditedRecords([...records]);
         break;
     }
     setIsEditing(true);
@@ -105,6 +165,10 @@ export default function TableWithToolbar() {
         setExpenses([...editedExpenses]);
         setRevenues([...editedRevenues]);
         break;
+      case "attendance":
+        setColumns([...editedColumns]);
+        setRecords([...editedRecords]);
+        break;
     }
     setIsEditing(false);
   };
@@ -120,6 +184,10 @@ export default function TableWithToolbar() {
       case "finance":
         setEditedExpenses([...expenses]);
         setEditedRevenues([...revenues]);
+        break;
+      case "attendance":
+        setEditedColumns([...columns]);
+        setEditedRecords([...records]);
         break;
     }
     setIsEditing(false);
@@ -178,10 +246,55 @@ export default function TableWithToolbar() {
         break;
       }
       case "attendance":
-        // Attendance should be reworked
-        console.warn("Add not implemented for attendance");
+        // create new blank column in draft state and add blank entries into editedRecords:
+        setEditedColumns((prev) => [...prev, { date: "", isDateValid: true }]);
+        setEditedRecords((prev) =>
+          prev.map((r) => ({
+            ...r,
+            dates: {
+              ...r.dates,
+              "": r.dates[""] ?? { present: false, comment: "" },
+            },
+          }))
+        );
+        setIsEditing(true);
         break;
     }
+  };
+
+  const handleGroupWorkers = () => {
+    if (activeTable === "workers") {
+      setShowGroups((prev) => !prev);
+    }
+  };
+
+  const handleAddToGroup = (groupName: string, workerIds: number[]) => {
+    setGroups((prev) => {
+      const existing = prev.find((g) => g.name === groupName);
+      if (existing) {
+        return prev.map((g) =>
+          g.name === groupName
+            ? {
+                ...g,
+                workerIds: Array.from(new Set([...g.workerIds, ...workerIds])),
+              }
+            : g
+        );
+      } else {
+        return [...prev, { name: groupName, workerIds }];
+      }
+    });
+  };
+
+  const handleSelectGroup = (groupName: string) => {
+    const group = groups.find((g) => g.name === groupName);
+    if (!group) return;
+    // Only select workers that still exist
+    const validIds = group.workerIds.filter((id: number) =>
+      workers.some((w) => w.id === id)
+    );
+    setSelectedRows(validIds);
+    setShowGroups(false);
   };
 
   // === Render correct table depending on activeTable ===
@@ -200,39 +313,50 @@ export default function TableWithToolbar() {
           />
         );
       case "attendance":
-        return <AttendanceTable workers={workers} />;
+        return (
+          <AttendanceTable
+            workers={workers}
+            columns={columns}
+            setColumns={setColumns}
+            records={records}
+            setRecords={setRecords}
+            editedColumns={editedColumns}
+            setEditedColumns={setEditedColumns}
+            editedRecords={editedRecords}
+            setEditedRecords={setEditedRecords}
+            isEditing={isEditing}
+          />
+        );
       case "finance":
         return (
-          <div className="finance-wrapper">
-            <div className="finance-tables">
-              <FinanceTable
-                title="Expenses"
-                type="expense"
-                workers={workers}
-                data={expenses}
-                editedData={editedExpenses}
-                setEditedData={setEditedExpenses}
-                selectedRows={selectedExpenses}
-                setSelectedRows={setSelectedExpenses}
-                isEditing={isEditing}
-                onAdd={() => handleAdd("expense")}
-              />
+          <div className="finance-tables">
+            <FinanceTable
+              title="Expenses"
+              type="expense"
+              workers={workers}
+              data={expenses}
+              editedData={editedExpenses}
+              setEditedData={setEditedExpenses}
+              selectedRows={selectedExpenses}
+              setSelectedRows={setSelectedExpenses}
+              isEditing={isEditing}
+              onAdd={() => handleAdd("expense")}
+            />
 
-              <div className="divider" />
+            <div className="divider" />
 
-              <FinanceTable
-                title="Revenues"
-                type="revenue"
-                workers={workers}
-                data={revenues}
-                editedData={editedRevenues}
-                setEditedData={setEditedRevenues}
-                selectedRows={selectedRevenues}
-                setSelectedRows={setSelectedRevenues}
-                isEditing={isEditing}
-                onAdd={() => handleAdd("revenue")}
-              />
-            </div>
+            <FinanceTable
+              title="Revenues"
+              type="revenue"
+              workers={workers}
+              data={revenues}
+              editedData={editedRevenues}
+              setEditedData={setEditedRevenues}
+              selectedRows={selectedRevenues}
+              setSelectedRows={setSelectedRevenues}
+              isEditing={isEditing}
+              onAdd={() => handleAdd("revenue")}
+            />
           </div>
         );
       case "partners":
@@ -261,17 +385,48 @@ export default function TableWithToolbar() {
           setActiveTable(t);
           setSelectedRows([]);
         }}
+        groups={groups}
+        onOpenCertificates={() => setShowCertificates(true)} // ✅
       />
       <div className="main">{renderTable()}</div>
       <ButtonHolder
+        activeTable={activeTable}
         hasSelection={hasSelection}
         isEditing={isEditing}
         onEdit={handleEdit}
         onApply={handleApply}
         onCancel={handleCancel}
         onDelete={handleDelete}
+        onGroup={handleGroupWorkers}
       />
-      <footer>A really nice footer</footer>
+      {showGroups && (
+        <GroupsModal
+          workers={workers}
+          groups={groups}
+          selectedWorkerIds={selectedRows}
+          onClose={() => setShowGroups(false)}
+          onAddToGroup={handleAddToGroup}
+          onSelectGroup={handleSelectGroup}
+        />
+      )}
+
+      {/* ✅ Certificates modal rendered in same layer */}
+      {showCertificates && (
+        <CertificatesModal
+          groups={groups}
+          selectedGroup={selectedGroup}
+          setSelectedGroup={setSelectedGroup}
+          handleCreateCertificate={handleCreateCertificate}
+          onClose={() => setShowCertificates(false)}
+        />
+      )}
+
+      <footer>
+        <div>
+          Made with <span aria-label="love">❤️</span> by Solvro © 2025
+        </div>
+        <a href="mailto:kn.solvro@pwr.edu.pl">kn.solvro@pwr.edu.pl</a>
+      </footer>
     </div>
   );
 }

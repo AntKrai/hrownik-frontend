@@ -221,7 +221,7 @@ export default function PartnersTable({
       </table>
 
       {isEditing && (
-        <button className="add-partner-btn" onClick={handleAddEntry}>
+        <button className="add-btn" onClick={handleAddEntry}>
           ➕ Add Partner
         </button>
       )}
