@@ -3,24 +3,30 @@ import { useEffect } from "react";
 
 import Toolbar from "./components/Menu";
 import ButtonHolder from "./components/ButtonHolder";
+import LoginPage from "./components/LoginPage";
+import GroupsModal, { type Group } from "./components/GroupsModal";
+import CertificatesModal from "./components/CertificatesModal";
 
 import WorkersTable, { type Worker } from "./tables/Workers";
 import AttendanceTable, {
   type AttendanceColumn,
   type AttendanceRecord,
 } from "./tables/Attendance";
-import { getData, getFinance } from "./helpers/getData";
 import type { FinanceEntry } from "./tables/Finance";
 import type { Partner } from "./tables/Partners";
 import FinanceTable from "./tables/Finance";
 import PartnersTable from "./tables/Partners";
-import GroupsModal, { type Group } from "./components/GroupsModal";
-import CertificatesModal from "./components/CertificatesModal";
+
+import { getData, getFinance } from "./helpers/getData";
 
 type TableType = "workers" | "attendance" | "finance" | "partners";
 
 export default function TableWithToolbar() {
   const [activeTable, setActiveTable] = useState<TableType>("workers");
+
+  //State for login
+  const [role, setRole] = useState<"admin" | "worker" | null>(null);
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
 
   // Generic editing flag and selection
   const [selectedRows, setSelectedRows] = useState<number[]>([]);
@@ -64,9 +70,9 @@ export default function TableWithToolbar() {
   // Grouping state
   const [groups, setGroups] = useState<Group[]>([]);
   const [showGroups, setShowGroups] = useState(false);
+
   // Certificates state
   const [showCertificates, setShowCertificates] = useState(false);
-
   const [selectedGroup, setSelectedGroup] = useState<string>("");
 
   const handleCreateCertificate = () => {
@@ -142,7 +148,7 @@ export default function TableWithToolbar() {
     workerId: null,
     phone: "",
     email: "",
-    status: "Pending", // default status
+    status: "Pending",
     comment: "",
   });
 
@@ -377,6 +383,19 @@ export default function TableWithToolbar() {
     }
   };
 
+  //Handling login
+  const handleLogin = (role: "admin" | "worker") => {
+    setRole(role);
+    setIsLoggedIn(true);
+  };
+  if (!isLoggedIn) {
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <LoginPage onLogin={handleLogin} />
+      </div>
+    );
+  }
+
   return (
     <div className="flex-container">
       <Toolbar
@@ -386,19 +405,22 @@ export default function TableWithToolbar() {
           setSelectedRows([]);
         }}
         groups={groups}
-        onOpenCertificates={() => setShowCertificates(true)} // ✅
+        onOpenCertificates={() => setShowCertificates(true)}
+        onOpenSettings={() => alert("Settings modal would open here.")}
       />
       <div className="main">{renderTable()}</div>
-      <ButtonHolder
-        activeTable={activeTable}
-        hasSelection={hasSelection}
-        isEditing={isEditing}
-        onEdit={handleEdit}
-        onApply={handleApply}
-        onCancel={handleCancel}
-        onDelete={handleDelete}
-        onGroup={handleGroupWorkers}
-      />
+      {role === "admin" && (
+        <ButtonHolder
+          activeTable={activeTable}
+          hasSelection={hasSelection}
+          isEditing={isEditing}
+          onEdit={handleEdit}
+          onApply={handleApply}
+          onCancel={handleCancel}
+          onDelete={handleDelete}
+          onGroup={handleGroupWorkers}
+        />
+      )}
       {showGroups && (
         <GroupsModal
           workers={workers}
@@ -410,8 +432,7 @@ export default function TableWithToolbar() {
         />
       )}
 
-      {/* ✅ Certificates modal rendered in same layer */}
-      {showCertificates && (
+      {showCertificates && role === "admin" && (
         <CertificatesModal
           groups={groups}
           selectedGroup={selectedGroup}

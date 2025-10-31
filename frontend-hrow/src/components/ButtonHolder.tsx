@@ -6,7 +6,7 @@ export interface ButtonHolderProps {
   onApply: () => void;
   onCancel: () => void;
   onDelete: () => void;
-  onGroup: () => void; // simplified, no args needed
+  onGroup: () => void;
 }
 
 export default function ButtonHolder({

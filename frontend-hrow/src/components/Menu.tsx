@@ -11,14 +11,15 @@ interface ToolbarProps {
   activeTable: TableType;
   onChange: (table: TableType) => void;
   groups: Group[];
-  onOpenCertificates: () => void; // ✅ new prop
+  onOpenCertificates: () => void;
+  onOpenSettings: () => void;
 }
 
 export default function Menu({
   activeTable,
   onChange,
-  // // groups,
   onOpenCertificates,
+  onOpenSettings,
 }: ToolbarProps) {
   return (
     <div className="navigation">
@@ -39,6 +40,9 @@ export default function Menu({
 
         <button className="nav-button" onClick={onOpenCertificates}>
           CERTIFICATES
+        </button>
+        <button className="nav-button" onClick={onOpenSettings}>
+          SETTINGS
         </button>
       </div>
     </div>
