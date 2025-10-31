@@ -28,7 +28,7 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
           placeholder="Username"
           value={username}
           onChange={(e) => setUsername(e.target.value)}
-          className="border p-2 rounded"
+          className="login-field"
         />
 
         <input
@@ -36,13 +36,10 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
           placeholder="Password"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
-          className="border p-2 rounded"
+          className="login-field"
         />
 
-        <button
-          type="submit"
-          className="bg-blue-500 text-white p-2 rounded mt-4"
-        >
+        <button type="submit" className="login-button">
           Log In
         </button>
       </form>

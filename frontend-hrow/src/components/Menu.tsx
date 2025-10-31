@@ -13,6 +13,7 @@ interface ToolbarProps {
   groups: Group[];
   onOpenCertificates: () => void;
   onOpenSettings: () => void;
+  role: string | null;
 }
 
 export default function Menu({
@@ -20,6 +21,7 @@ export default function Menu({
   onChange,
   onOpenCertificates,
   onOpenSettings,
+  role,
 }: ToolbarProps) {
   return (
     <div className="navigation">
@@ -37,10 +39,11 @@ export default function Menu({
             </button>
           )
         )}
-
-        <button className="nav-button" onClick={onOpenCertificates}>
-          CERTIFICATES
-        </button>
+        {role === "admin" && (
+          <button className="nav-button" onClick={onOpenCertificates}>
+            CERTIFICATES
+          </button>
+        )}
         <button className="nav-button" onClick={onOpenSettings}>
           SETTINGS
         </button>

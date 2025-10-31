@@ -6,6 +6,8 @@ import ButtonHolder from "./components/ButtonHolder";
 import LoginPage from "./components/LoginPage";
 import GroupsModal, { type Group } from "./components/GroupsModal";
 import CertificatesModal from "./components/CertificatesModal";
+import Footer from "./components/Footer";
+import SettingsModal from "./components/SettingsModal";
 
 import WorkersTable, { type Worker } from "./tables/Workers";
 import AttendanceTable, {
@@ -27,6 +29,9 @@ export default function TableWithToolbar() {
   //State for login
   const [role, setRole] = useState<"admin" | "worker" | null>(null);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
+
+  // State for settings
+  const [showSettings, setShowSettings] = useState(false);
 
   // Generic editing flag and selection
   const [selectedRows, setSelectedRows] = useState<number[]>([]);
@@ -383,6 +388,12 @@ export default function TableWithToolbar() {
     }
   };
 
+  const handleLogout = () => {
+    setIsLoggedIn(false);
+    setRole(null);
+    setShowSettings(false);
+  };
+
   //Handling login
   const handleLogin = (role: "admin" | "worker") => {
     setRole(role);
@@ -390,8 +401,14 @@ export default function TableWithToolbar() {
   };
   if (!isLoggedIn) {
     return (
-      <div className="flex items-center justify-center h-screen">
-        <LoginPage onLogin={handleLogin} />
+      <div className="login-page">
+        <div className="login-container">
+          <img src="/hrownik-header.png" alt="Header" />
+          <div className="login-content">
+            <LoginPage onLogin={handleLogin} />
+          </div>
+        </div>
+        <Footer />
       </div>
     );
   }
@@ -406,7 +423,8 @@ export default function TableWithToolbar() {
         }}
         groups={groups}
         onOpenCertificates={() => setShowCertificates(true)}
-        onOpenSettings={() => alert("Settings modal would open here.")}
+        onOpenSettings={() => setShowSettings(true)}
+        role={role}
       />
       <div className="main">{renderTable()}</div>
       {role === "admin" && (
@@ -442,12 +460,20 @@ export default function TableWithToolbar() {
         />
       )}
 
-      <footer>
-        <div>
+      {showSettings && (
+        <SettingsModal
+          onClose={() => setShowSettings(false)}
+          onLogout={handleLogout}
+        />
+      )}
+
+      {/*<footer>
+         <div>
           Made with <span aria-label="love">❤️</span> by Solvro © 2025
         </div>
         <a href="mailto:kn.solvro@pwr.edu.pl">kn.solvro@pwr.edu.pl</a>
-      </footer>
+      </footer> */}
+      <Footer />
     </div>
   );
 }
